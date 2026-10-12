@@ -189,3 +189,44 @@ down-then-across output when no display option is supplied.
 The new `-x` mode prints names left to right and wraps when the next padded
 column would exceed the detected terminal width. The default mode and `-l`
 mode remain available.
+
+## Feature 5: Alphabetical Sort
+
+### 1. Why must entries be read into memory before sorting? What are the drawbacks for directories with millions of files?
+
+Sorting requires access to the complete collection of entries. The program
+therefore reads the visible names into a dynamic array before calling
+`qsort()`. If entries were printed immediately while reading the directory,
+later entries could not be moved before earlier output.
+
+The main drawback is memory usage. A directory containing millions of files
+requires memory for the array, each copied filename, and, in long-listing
+mode, each stored `struct stat`. Reading everything also delays the first
+output and can make allocation or sorting expensive. The approach is simple
+and suitable for this assignment, but a production utility must account for
+very large directories.
+
+### 2. Explain the comparison function required by `qsort()`. Why does it use `const void *` arguments?
+
+`qsort()` is a generic C library sorting function, so it does not know the
+element type. Its comparison function receives pointers to two array
+elements as `const void *`:
+
+```c
+static int compare_names(const void *left, const void *right)
+{
+    const char *const *first = left;
+    const char *const *second = right;
+    return strcmp(*first, *second);
+}
+```
+
+The arguments are `void *` so the same `qsort()` function can sort many data
+types. They are `const` because the comparison must not modify the elements.
+The comparator casts them to the actual element type and returns a negative
+value, zero, or a positive value when the first element is respectively
+less than, equal to, or greater than the second.
+
+Feature 5 uses one comparator for the `char **` name array and another for
+the `FileInfo` array used by `-l`. This ensures alphabetical ordering applies
+to default, `-x`, and long-listing output.
