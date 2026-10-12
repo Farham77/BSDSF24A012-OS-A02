@@ -148,3 +148,44 @@ The default `do_ls()` behavior now collects names, determines the terminal
 width with `ioctl(TIOCGWINSZ)`, and prints names down each column before
 moving across. The `-l` path remains unchanged and continues to print the
 long listing format.
+
+## Feature 4: Horizontal Column Display (`-x`)
+
+### 1. Compare the "down then across" and "across" printing logic. Which requires more pre-calculation?
+
+The default down-then-across mode calculates both the number of columns and
+the number of rows. It uses the index:
+
+```text
+row + column * rows
+```
+
+This rearranges the sequential array into column-major output, so it requires
+more pre-calculation and indexing logic.
+
+The `-x` mode is row-major. It loops through the array in its existing order,
+tracks the current horizontal position, and starts a new line when the next
+column would exceed the terminal width. It still needs the longest filename
+and terminal width to determine column spacing, but it does not need a row
+calculation or column-major index formula. Therefore, the default
+down-then-across mode is more complex.
+
+### 2. How does the program manage `-l`, `-x`, and default display modes?
+
+`getopt()` recognizes both `l` and `x`. The program stores the selected modes
+in `long_format` and `horizontal` flags:
+
+```c
+while ((option = getopt(argc, (char * const *)argv, "lx")) != -1)
+```
+
+If `-l` is present, `main()` calls `long_ls()`. Otherwise it calls `do_ls()`
+and passes the horizontal flag. `do_ls()` calls the shared `print_names()`
+helper, which selects row-major output for `-x` or the existing
+down-then-across output when no display option is supplied.
+
+## Feature 4 implementation summary
+
+The new `-x` mode prints names left to right and wraps when the next padded
+column would exceed the detected terminal width. The default mode and `-l`
+mode remain available.
