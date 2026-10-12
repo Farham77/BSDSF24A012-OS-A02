@@ -23,7 +23,7 @@
 
 extern int errno;
 
-void do_ls(const char *dir);
+void do_ls(const char *dir, int horizontal);
 void long_ls(const char *dir);
 
 typedef struct
@@ -39,6 +39,55 @@ static int terminal_width(void)
         window.ws_col > 0)
         return window.ws_col;
     return 80;
+}
+
+static void print_names(char **names, size_t count, size_t longest,
+                        int horizontal)
+{
+    size_t spacing = 2;
+    size_t column_width = longest + spacing;
+    size_t columns = (size_t)terminal_width() / column_width;
+
+    if (columns == 0)
+        columns = 1;
+    if (columns > count)
+        columns = count;
+
+    if (horizontal)
+    {
+        size_t position = 0;
+        for (size_t i = 0; i < count; i++)
+        {
+            if (position > 0 && position + column_width >
+                (size_t)terminal_width())
+            {
+                putchar('\n');
+                position = 0;
+            }
+            printf("%-*s", (int)(i == count - 1 ? strlen(names[i]) :
+                   column_width), names[i]);
+            position += column_width;
+        }
+        if (count > 0)
+            putchar('\n');
+        return;
+    }
+
+    {
+        size_t rows = (count + columns - 1) / columns;
+        for (size_t row = 0; row < rows; row++)
+        {
+            for (size_t column = 0; column < columns; column++)
+            {
+                size_t index = row + column * rows;
+                if (index >= count)
+                    continue;
+                printf("%-*s", (int)(column == columns - 1 ?
+                       strlen(names[index]) : column_width), names[index]);
+            }
+            putchar('\n');
+        }
+    }
 }
 
 static void mode_to_string(mode_t mode, char *result)
@@ -65,14 +114,17 @@ int main(int argc, char const *argv[])
 {
     int option;
     int long_format = 0;
+    int horizontal = 0;
 
-    while ((option = getopt(argc, (char * const *)argv, "l")) != -1)
+    while ((option = getopt(argc, (char * const *)argv, "lx")) != -1)
     {
         if (option == 'l')
             long_format = 1;
+        else if (option == 'x')
+            horizontal = 1;
         else
         {
-            fprintf(stderr, "Usage: %s [-l] [directory ...]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-l] [-x] [directory ...]\n", argv[0]);
             return EXIT_FAILURE;
         }
     }
@@ -82,7 +134,7 @@ int main(int argc, char const *argv[])
         if (long_format)
             long_ls(".");
         else
-            do_ls(".");
+            do_ls(".", horizontal);
     }
     else
     {
@@ -92,14 +144,14 @@ int main(int argc, char const *argv[])
             if (long_format)
                 long_ls(argv[i]);
             else
-                do_ls(argv[i]);
+                do_ls(argv[i], horizontal);
 	    puts("");
         }
     }
     return 0;
 }
 
-void do_ls(const char *dir)
+void do_ls(const char *dir, int horizontal)
 {
     DIR *dp = opendir(dir);
     struct dirent *entry;
@@ -151,31 +203,7 @@ void do_ls(const char *dir)
     closedir(dp);
 
     if (count > 0)
-    {
-        size_t spacing = 2;
-        size_t column_width = longest + spacing;
-        size_t columns = (size_t)terminal_width() / column_width;
-        size_t rows;
-
-        if (columns == 0)
-            columns = 1;
-        if (columns > count)
-            columns = count;
-        rows = (count + columns - 1) / columns;
-
-        for (size_t row = 0; row < rows; row++)
-        {
-            for (size_t column = 0; column < columns; column++)
-            {
-                size_t index = row + column * rows;
-                if (index >= count)
-                    continue;
-                printf("%-*s", (int)(column == columns - 1 ?
-                       strlen(names[index]) : column_width), names[index]);
-            }
-            putchar('\n');
-        }
-    }
+        print_names(names, count, longest, horizontal);
 
     for (size_t i = 0; i < count; i++)
         free(names[i]);
