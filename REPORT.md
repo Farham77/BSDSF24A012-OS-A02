@@ -103,3 +103,48 @@ make clean
 make
 ./bin/ls -l
 ```
+
+## Feature 3: Column Display (Down Then Across)
+
+### 1. Explain the general logic for printing items in a "down then across" columnar format. Why is a simple single loop insufficient?
+
+The program first reads all visible names into a dynamically allocated array.
+While reading, it records the longest name. It then calculates the number of
+columns that fit in the available terminal width:
+
+```text
+columns = terminal_width / (longest_name + spacing)
+rows = (number_of_items + columns - 1) / columns
+```
+
+The output is printed row by row, but the array is indexed column by column:
+
+```text
+index = row + column * rows
+```
+
+This produces the required "down then across" layout. A simple loop through
+the array would print entries in one sequential order and would not know
+which later item belongs in the next column of the current row. The complete
+array and row/column calculation are therefore needed before printing.
+
+### 2. What is the purpose of `ioctl` here? What are the limitations of using a fixed 80-column fallback?
+
+`ioctl()` is a system call that can query terminal properties. With the
+`TIOCGWINSZ` request, the program obtains the current terminal width from a
+`struct winsize`. The column count can then adapt when the terminal is
+resized.
+
+The program uses 80 columns if terminal-size detection fails, such as when
+output is redirected or no terminal is attached. A fixed fallback is less
+accurate on terminals narrower or wider than 80 columns. It can cause
+unnecessary wrapping, excessive whitespace, or lines that extend past the
+actual display width. It is useful as a safe fallback, but dynamic detection
+is preferable.
+
+### Feature 3 implementation summary
+
+The default `do_ls()` behavior now collects names, determines the terminal
+width with `ioctl(TIOCGWINSZ)`, and prints names down each column before
+moving across. The `-l` path remains unchanged and continues to print the
+long listing format.
