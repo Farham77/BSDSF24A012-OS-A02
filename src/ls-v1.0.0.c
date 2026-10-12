@@ -19,6 +19,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include <time.h>
+#include <sys/ioctl.h>
 
 extern int errno;
 
@@ -30,6 +31,15 @@ typedef struct
     char *name;
     struct stat info;
 } FileInfo;
+
+static int terminal_width(void)
+{
+    struct winsize window;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &window) == 0 &&
+        window.ws_col > 0)
+        return window.ws_col;
+    return 80;
+}
 
 static void mode_to_string(mode_t mode, char *result)
 {
@@ -91,27 +101,85 @@ int main(int argc, char const *argv[])
 
 void do_ls(const char *dir)
 {
-    struct dirent *entry;
     DIR *dp = opendir(dir);
+    struct dirent *entry;
+    char **names = NULL;
+    size_t count = 0;
+    size_t capacity = 0;
+    size_t longest = 0;
+
     if (dp == NULL)
     {
         fprintf(stderr, "Cannot open directory : %s\n", dir);
         return;
     }
+
     errno = 0;
     while ((entry = readdir(dp)) != NULL)
     {
+        size_t length;
         if (entry->d_name[0] == '.')
             continue;
-        printf("%s\n", entry->d_name);
+
+        if (count == capacity)
+        {
+            size_t new_capacity = capacity == 0 ? 16 : capacity * 2;
+            char **new_names = realloc(names, new_capacity * sizeof(*names));
+            if (new_names == NULL)
+            {
+                perror("realloc failed");
+                break;
+            }
+            names = new_names;
+            capacity = new_capacity;
+        }
+
+        names[count] = strdup(entry->d_name);
+        if (names[count] == NULL)
+        {
+            perror("strdup failed");
+            break;
+        }
+        length = strlen(names[count]);
+        if (length > longest)
+            longest = length;
+        count++;
     }
 
     if (errno != 0)
-    {
         perror("readdir failed");
+    closedir(dp);
+
+    if (count > 0)
+    {
+        size_t spacing = 2;
+        size_t column_width = longest + spacing;
+        size_t columns = (size_t)terminal_width() / column_width;
+        size_t rows;
+
+        if (columns == 0)
+            columns = 1;
+        if (columns > count)
+            columns = count;
+        rows = (count + columns - 1) / columns;
+
+        for (size_t row = 0; row < rows; row++)
+        {
+            for (size_t column = 0; column < columns; column++)
+            {
+                size_t index = row + column * rows;
+                if (index >= count)
+                    continue;
+                printf("%-*s", (int)(column == columns - 1 ?
+                       strlen(names[index]) : column_width), names[index]);
+            }
+            putchar('\n');
+        }
     }
 
-    closedir(dp);
+    for (size_t i = 0; i < count; i++)
+        free(names[i]);
+    free(names);
 }
 
 void long_ls(const char *dir)
