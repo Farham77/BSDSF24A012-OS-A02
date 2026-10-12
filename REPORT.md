@@ -230,3 +230,45 @@ less than, equal to, or greater than the second.
 Feature 5 uses one comparator for the `char **` name array and another for
 the `FileInfo` array used by `-l`. This ensures alphabetical ordering applies
 to default, `-x`, and long-listing output.
+
+## Feature 6: Colorized Output
+
+### 1. How do ANSI escape codes produce color in a standard Linux terminal? Show the code sequence for green text.
+
+ANSI escape codes are special characters interpreted by terminal emulators as
+formatting instructions. The escape character is followed by a control
+sequence. For example, green text can be printed and then reset with:
+
+```c
+printf("\033[0;32mgreen text\033[0m");
+```
+
+`\033[0;32m` selects green, and `\033[0m` resets the terminal style. The
+program defines color constants and prints the reset code after every name so
+later output does not accidentally inherit the color.
+
+### 2. Which permission bits determine whether a file is executable?
+
+The execute bits in `st_mode` are:
+
+```c
+S_IXUSR /* owner execute */
+S_IXGRP /* group execute */
+S_IXOTH /* others execute */
+```
+
+The program checks them together:
+
+```c
+mode & (S_IXUSR | S_IXGRP | S_IXOTH)
+```
+
+A nonzero result means at least one class of user has execute permission.
+Executable files are printed green.
+
+### Feature 6 implementation summary
+
+The program uses `lstat()` to determine each entry's type and selects colors
+with `color_for()`: directories are blue, executables green, `.tar`, `.gz`,
+and `.zip` archives red, symbolic links pink, and special files reverse
+video. The same color logic is used by column output and long listing.
