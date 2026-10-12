@@ -272,3 +272,41 @@ The program uses `lstat()` to determine each entry's type and selects colors
 with `color_for()`: directories are blue, executables green, `.tar`, `.gz`,
 and `.zip` archives red, symbolic links pink, and special files reverse
 video. The same color logic is used by column output and long listing.
+
+## Feature 7: Recursive Listing (`-R`)
+
+### 1. What is a base case? What stops recursion in this implementation?
+
+A base case is the condition under which a recursive function stops making
+recursive calls. Without a base case, recursion would continue until the
+process ran out of stack or another resource.
+
+In this program, recursion stops naturally when a directory has no visible
+subdirectories. The function also recurses only when `lstat()` succeeds and
+`S_ISDIR(st_mode)` is true. It does not recurse into regular files or
+symbolic links. Entries beginning with `.` are skipped, so `.` and `..` do
+not create cycles.
+
+### 2. Why construct the full path before recursion? What happens if only the child name is used?
+
+The full path preserves the relationship between the current directory and
+the child:
+
+```text
+parent_dir/subdir
+```
+
+The function uses `snprintf()` to construct this path and passes it to the
+recursive call. If it called `do_ls("subdir")` or the recursive function with
+only `"subdir"`, the path would be interpreted relative to the process's
+current working directory, not necessarily relative to `parent_dir`. The
+program could fail to open the directory or open an unrelated directory with
+the same name.
+
+### Feature 7 implementation summary
+
+`-R` selects `recursive_ls()`. It prints a directory header, uses the
+existing sorted/colorized/default or long-listing logic, collects child names,
+sorts them, constructs a full path for each child, and recursively visits
+directories. `lstat()` prevents symbolic links to directories from causing
+unexpected traversal.
