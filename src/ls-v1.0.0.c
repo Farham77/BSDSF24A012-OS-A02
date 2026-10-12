@@ -32,6 +32,20 @@ typedef struct
     struct stat info;
 } FileInfo;
 
+static int compare_names(const void *left, const void *right)
+{
+    const char *const *first = left;
+    const char *const *second = right;
+    return strcmp(*first, *second);
+}
+
+static int compare_files(const void *left, const void *right)
+{
+    const FileInfo *first = left;
+    const FileInfo *second = right;
+    return strcmp(first->name, second->name);
+}
+
 static int terminal_width(void)
 {
     struct winsize window;
@@ -202,6 +216,8 @@ void do_ls(const char *dir, int horizontal)
         perror("readdir failed");
     closedir(dp);
 
+    if (count > 1)
+        qsort(names, count, sizeof(*names), compare_names);
     if (count > 0)
         print_names(names, count, longest, horizontal);
 
@@ -268,6 +284,8 @@ void long_ls(const char *dir)
         perror("readdir failed");
     closedir(dp);
 
+    if (count > 1)
+        qsort(files, count, sizeof(*files), compare_files);
     for (size_t i = 0; i < count; i++)
     {
         int links = snprintf(NULL, 0, "%lu",
