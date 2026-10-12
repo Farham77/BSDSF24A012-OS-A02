@@ -25,6 +25,7 @@ extern int errno;
 
 void do_ls(const char *dir, int horizontal);
 void long_ls(const char *dir);
+void recursive_ls(const char *dir, int horizontal, int long_format);
 
 typedef struct
 {
@@ -174,23 +175,29 @@ int main(int argc, char const *argv[])
     int option;
     int long_format = 0;
     int horizontal = 0;
+    int recursive = 0;
 
-    while ((option = getopt(argc, (char * const *)argv, "lx")) != -1)
+    while ((option = getopt(argc, (char * const *)argv, "lxR")) != -1)
     {
         if (option == 'l')
             long_format = 1;
         else if (option == 'x')
             horizontal = 1;
+        else if (option == 'R')
+            recursive = 1;
         else
         {
-            fprintf(stderr, "Usage: %s [-l] [-x] [directory ...]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-l] [-x] [-R] [directory ...]\n",
+                    argv[0]);
             return EXIT_FAILURE;
         }
     }
 
     if (optind == argc)
     {
-        if (long_format)
+        if (recursive)
+            recursive_ls(".", horizontal, long_format);
+        else if (long_format)
             long_ls(".");
         else
             do_ls(".", horizontal);
@@ -199,12 +206,17 @@ int main(int argc, char const *argv[])
     {
         for (int i = optind; i < argc; i++)
         {
-            printf("Directory listing of %s : \n", argv[i]);
-            if (long_format)
-                long_ls(argv[i]);
+            if (recursive)
+                recursive_ls(argv[i], horizontal, long_format);
             else
-                do_ls(argv[i], horizontal);
-	    puts("");
+            {
+                printf("Directory listing of %s : \n", argv[i]);
+                if (long_format)
+                    long_ls(argv[i]);
+                else
+                    do_ls(argv[i], horizontal);
+                puts("");
+            }
         }
     }
     return 0;
@@ -387,4 +399,80 @@ void long_ls(const char *dir)
     for (size_t i = 0; i < count; i++)
         free(files[i].name);
     free(files);
+}
+
+void recursive_ls(const char *dir, int horizontal, int long_format)
+{
+    DIR *dp;
+    struct dirent *entry;
+    char **names = NULL;
+    size_t count = 0;
+    size_t capacity = 0;
+
+    printf("%s:\n", dir);
+    if (long_format)
+        long_ls(dir);
+    else
+        do_ls(dir, horizontal);
+
+    dp = opendir(dir);
+    if (dp == NULL)
+    {
+        fprintf(stderr, "Cannot open directory : %s\n", dir);
+        return;
+    }
+
+    errno = 0;
+    while ((entry = readdir(dp)) != NULL)
+    {
+        char **new_names;
+
+        if (entry->d_name[0] == '.')
+            continue;
+        if (count == capacity)
+        {
+            size_t new_capacity = capacity == 0 ? 16 : capacity * 2;
+            new_names = realloc(names, new_capacity * sizeof(*names));
+            if (new_names == NULL)
+            {
+                perror("realloc failed");
+                break;
+            }
+            names = new_names;
+            capacity = new_capacity;
+        }
+        names[count] = strdup(entry->d_name);
+        if (names[count] == NULL)
+        {
+            perror("strdup failed");
+            break;
+        }
+        count++;
+    }
+    if (errno != 0)
+        perror("readdir failed");
+    closedir(dp);
+
+    if (count > 1)
+        qsort(names, count, sizeof(*names), compare_names);
+
+    for (size_t i = 0; i < count; i++)
+    {
+        char path[4096];
+        struct stat info;
+        int length = snprintf(path, sizeof(path), "%s/%s", dir, names[i]);
+
+        if (length < 0 || (size_t)length >= sizeof(path) ||
+            lstat(path, &info) == -1)
+            continue;
+        if (S_ISDIR(info.st_mode))
+        {
+            putchar('\n');
+            recursive_ls(path, horizontal, long_format);
+        }
+    }
+
+    for (size_t i = 0; i < count; i++)
+        free(names[i]);
+    free(names);
 }
